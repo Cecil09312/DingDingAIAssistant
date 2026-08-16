@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     llm_temperature: float = 0.7
     # 评判模型（评估用）
     llm_judge_model: str = "qwen-plus"
-    # 路由小模型（情感分析/路由判断/抽取等轻量任务，降低成本与延迟）
+    # 路由小模型（路由判断/抽取等轻量任务，降低成本与延迟）
     llm_router_model: str = "qwen-turbo"
     # LLM 调用最大重试次数（针对 429 限流、网络抖动等可重试错误）
     llm_max_retries: int = 3

@@ -16,7 +16,7 @@ from agent.prompts import (
     ROUTER_PROMPT,
     build_system_prompt,
 )
-from agent.state import AgentState, EmotionInfo
+from agent.state import AgentState
 
 
 def _get_llm(temperature: float = 0.7, model: str = None):
@@ -43,7 +43,7 @@ def _get_llm(temperature: float = 0.7, model: str = None):
 
 
 def _get_router_llm(temperature: float = 0.0):
-    """获取路由小模型实例（情感/路由/抽取等轻量任务，含重试与超时）。"""
+    """获取路由小模型实例（路由/抽取等轻量任务，含重试与超时）。"""
     from langchain_openai import ChatOpenAI
 
     from config.settings import get_settings
@@ -59,61 +59,13 @@ def _get_router_llm(temperature: float = 0.0):
     )
 
 
-# ---------- 节点 0: 预检查（缓存匹配 + 情感路由）----------
-def _emotion_route_combined(user_input: str):
-    """合并情感分析 + 路由判断为一次 LLM 调用（P1 优化）。
-
-    相比分别调用 emotion_node + route_node，减少 1 次 LLM 调用。
-    短输入短路或合并失败时返回 None，由调用方回退到分别调用。
-
-    Returns:
-        (EmotionResult, route_str) 或 None
-    """
-    # 短输入短路（交给 route_node 的 _decide_route 处理）
-    if len(user_input) <= 4 and not any(
-        k in user_input for k in ROUTER_KEYWORDS + WEB_SEARCH_KEYWORDS
-    ):
-        return None
-    try:
-        from agent.prompts import EMOTION_ROUTE_PROMPT
-        from emotion.analyzer import EmotionResult, TONE_MAP
-
-        llm = _get_router_llm(temperature=0.0)
-        resp = llm.invoke([HumanMessage(content=EMOTION_ROUTE_PROMPT.format(input=user_input))])
-        content = resp.content if isinstance(resp.content, str) else str(resp.content)
-        data = _parse_json_block(content)
-        emotion_label = (data.get("emotion") or "neutral").lower()
-        if emotion_label not in TONE_MAP:
-            emotion_label = "neutral"
-        route = (data.get("route") or "chat").lower()
-        if route not in ("rag", "web", "chat", "tool"):
-            route = "chat"
-        # 工具调用需开启且配置可用
-        if route == "tool":
-            from config.settings import get_settings
-            if not get_settings().tool_calling_enabled:
-                route = "chat"
-        # web 搜索关闭时降级为 rag
-        if route == "web":
-            from config.settings import get_settings
-            if not get_settings().web_search_enabled:
-                route = "rag"
-        emotion_result = EmotionResult(
-            label=emotion_label, score=0.8, tone=TONE_MAP[emotion_label]
-        )
-        return (emotion_result, route)
-    except Exception as e:
-        print(f"[pre_check] 合并 emotion+route 失败，回退分别调用: {e}")
-        return None
-
-
+# ---------- 节点 0: 预检查（缓存匹配 + 路由判断）----------
 def pre_check_node(state: AgentState) -> dict:
-    """预检查节点：合并执行问答缓存匹配 + 情感分析 + 路由判断。
+    """预检查节点：合并执行问答缓存匹配 + 路由判断。
 
-    顺序执行 qa_match_node / emotion_node / route_node 并合并输出；
+    顺序执行 qa_match_node / route_node 并合并输出；
     问答缓存命中时提前返回，后续条件边短路到 END，跳过整条生成链路。
-    P1 优化：emotion + route 合并为一次 LLM 调用，失败回退分别调用。
-    新增：优先处理 pending_confirmation 状态（用户确认工具操作）。
+    优先处理 pending_confirmation 状态（用户确认工具操作）。
     """
     # 优先处理确认状态：上一轮有 pending_confirmation 时检查用户是否在确认
     if state.get("pending_confirmation"):
@@ -137,20 +89,12 @@ def pre_check_node(state: AgentState) -> dict:
             pass
 
     result = {}
-    # 问答缓存匹配（命中则短路，跳过情感与路由）
+    # 问答缓存匹配（命中则短路，跳过路由）
     result.update(qa_match_node(state))
     if result.get("memory_hit"):
         return result
-    # P1 优化：合并情感分析 + 路由判断为一次 LLM 调用
-    combined = _emotion_route_combined(state.get("user_input", ""))
-    if combined is not None:
-        emotion_result, route = combined
-        result["emotion"] = emotion_result
-        result["search_route"] = route
-    else:
-        # 回退到分别调用（短输入短路或合并失败时）
-        result.update(emotion_node(state))
-        result.update(route_node(state))
+    # 路由判断（LLM + 关键词兜底）
+    result.update(route_node(state))
     return result
 
 
@@ -176,22 +120,7 @@ def pre_check_condition(state: AgentState) -> str:
         return "load_memory"
 
 
-# ---------- 节点 1: 情感分析 ----------
-def emotion_node(state: AgentState) -> dict:
-    """分析用户输入的情感，结果写入 state.emotion。"""
-    from emotion.analyzer import analyze, get_tone_guidance
-
-    user_input = state.get("user_input", "")
-    result = analyze(user_input)
-    tone_guidance = get_tone_guidance(result)
-    return {
-        "emotion": result,
-        # 把语气指引暂存到 state 供 generate 节点用（通过 messages 之外的渠道）
-        # 这里我们将其存入 long_term_context 的拼接逻辑由 generate 节点处理
-    }
-
-
-# ---------- 节点 2: 路由判断 ----------
+# ---------- 节点 1: 路由判断 ----------
 def route_node(state: AgentState) -> dict:
     """判断使用哪种处理方式（rag/web/chat），写入 search_route。"""
     user_input = state.get("user_input", "")
@@ -529,25 +458,15 @@ def _try_fallback_generate(chat_messages, settings, primary_error):
 
 def generate_node(state: AgentState) -> dict:
     """组装 prompt 并生成回答（主模型失败自动降级到小模型）。"""
-    from emotion.analyzer import EmotionResult, get_tone_guidance
-
     from config.settings import get_settings
 
     user_input = state.get("user_input", "")
-    emotion = state.get("emotion")
     rag_context = state.get("rag_context", "")
     long_term_context = state.get("long_term_context", "")
     messages = state.get("messages", [])
     settings = get_settings()
 
-    # 组装语气指引
-    if emotion:
-        tone_guidance = get_tone_guidance(emotion)
-    else:
-        tone_guidance = ""
-
     system_prompt = build_system_prompt(
-        tone_guidance=tone_guidance,
         long_term_context=long_term_context,
         rag_context=rag_context,
     )

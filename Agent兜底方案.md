@@ -198,7 +198,7 @@
 用户输入
     │
     ▼
-pre_check (qa_match + emotion_route 并行)
+pre_check (qa_match 问答缓存匹配 + route 路由判断)
     │
     ├─ 缓存命中 ──────────────────────────► END (直接复用历史答案)
     │
@@ -283,7 +283,7 @@ pre_check (qa_match + emotion_route 并行)
 
 **位置**：`config/settings.py` 新增配置 + `agent/nodes.py` `_get_router_llm`
 
-补全路由小模型配置，供情感分析/路由判断/抽取等轻量任务使用，降低成本与延迟：
+补全路由小模型配置，供路由判断/抽取等轻量任务使用，降低成本与延迟：
 
 - 新增配置项：`llm_router_model: str = "qwen-turbo"`
 - 补全 `_get_router_llm` 函数定义（此前被 `main.py` 引用但未定义），含重试与超时配置
@@ -294,7 +294,7 @@ pre_check (qa_match + emotion_route 并行)
 
 补全 `graph.py` 引用但未定义的三个节点函数，恢复 graph 构建：
 
-- `pre_check_node`：合并执行 `qa_match_node` + `emotion_node` + `route_node`，缓存命中时提前返回短路
+- `pre_check_node`：合并执行 `qa_match_node` + `route_node`，缓存命中时提前返回短路
 - `pre_check_condition`：缓存命中→`end`；否则按 `search_route` 四路分流（rag→retrieve / web→web_search / chat→load_memory）
 - `memory_background_node`：合并执行 `extract_facts_node` + `memory_update_node`，两者内部独立 try/except 互不影响
 

@@ -64,7 +64,7 @@ def warmup_llm():
     def _do_warmup():
         # 预热 temperature 必须与实际调用一致，否则 lru_cache 会缓存成不同实例，
         # 预热的连接池无法被复用。
-        # - router 实际用 0.0（emotion_route / extract / route 均传 0.0）
+        # - router 实际用 0.0（route / extract / tool 均传 0.0）
         # - main_llm 实际用默认 0.7（generate_node 调用 _get_llm()）
         warmup_targets = [
             ("router_llm", lambda: _get_router_llm(temperature=0.0)),
@@ -219,7 +219,7 @@ async def api_chat_stream(req: ChatRequest):
     """Web 端流式聊天接口（SSE）。
 
     事件类型：
-        status：节点进度（情感分析/路由/检索/生成等）
+        status：节点进度（路由/检索/生成等）
         token ：回答的 token 增量
         error ：异常信息
         done  ：结束标记

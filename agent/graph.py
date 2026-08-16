@@ -1,25 +1,24 @@
 """LangGraph StateGraph 构建。
 
-工作流（并行预检查 + 四路分流 + 后台记忆）：
-    START -> pre_check(qa_match + emotion_route 并行)
+工作流（预检查 + 四路分流 + 后台记忆）：
+    START -> pre_check(qa_match + route 路由判断)
                 ├── 缓存命中 → END（直接复用历史答案）
                 └── 未命中 → pre_check_condition 四路分流：
                     ┌───────────┬───────────┬───────────┐
                     ↓           ↓           ↓           ↓
-              retrieve     web_search   load_memory   generate
-              (知识库检索)  (联网搜索)   (长期记忆)    (直接生成)
-                    ↓           ↓           ↓           |
-                    └──────────→ generate ←─┘           |
+              retrieve     web_search   load_memory   tool
+              (知识库检索)  (联网搜索)   (长期记忆)    (工具调用)
+                    ↓           ↓           ↓           ↓
+                    └──────────→ generate ←─┘          END
                                 ↓
                         memory_background(后台异步: 抽取+记忆更新)
                                 ↓
                               END
 
 优化点：
-1. qa_match + emotion_route 并行执行（省 0.3-0.5s 串行等待）
-2. emotion + route 合并为一次小模型调用（省 1-2s）
-3. extract_facts + memory_update 后台线程执行（不阻塞响应）
-4. 缓存命中直接返回（省全部链路）
+1. qa_match 问答缓存命中直接返回（省全部链路）
+2. extract_facts + memory_update 后台线程执行（不阻塞响应）
+3. tool 工具调用直接返回结果（不经过 generate）
 
 编译时挂载 checkpointer（MemorySaver），按 thread_id 维护短期上下文。
 """
@@ -143,7 +142,7 @@ def _emit_message_events(events_iter):
     """将 graph.stream/astream 双模式输出转为统一的 node/token 事件。
 
     过滤规则：
-    - 仅透传 generate 节点产出的 AIMessageChunk（排除 emotion/route 的内部 LLM 调用）；
+    - 仅透传 generate 节点产出的 AIMessageChunk（排除 route 等内部 LLM 调用）；
     - 同一次 LLM 流式调用的所有 chunk 共享同一 lc_run id，不能按 id 去重；
     - 流结束后 LangGraph 还会 yield 节点返回的完整 AIMessage（内容与已输出
       增量之和重复），需按内容匹配跳过。

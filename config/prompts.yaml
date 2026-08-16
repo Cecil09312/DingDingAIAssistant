@@ -9,11 +9,9 @@
 # ===== 智能体主流程 =====
 agent:
   # 主系统 prompt 模板
-  # 占位符：{tone_guidance} {memory_section} {rag_section} {memory_instruction}
+  # 占位符：{memory_section} {rag_section} {memory_instruction}
   system_prompt_template: |
     你是一个钉钉 AI 智能体助手，友好、专业地为用户解答问题、提供建议。
-
-    {tone_guidance}
 
     {memory_section}
 
@@ -130,72 +128,3 @@ memory:
 
     新对话：
     {conversation}
-
-
-# ===== 情感分析 =====
-emotion:
-  # 情感分析系统 prompt
-  system_prompt: |
-    你是一个情感分析专家。请分析用户消息的情感倾向。
-
-    只输出一个 JSON 对象，不要输出任何其他内容，格式如下：
-    {"label": "positive|negative|neutral", "score": 0.0~1.0, "reason": "简要原因"}
-
-    规则：
-    - positive：表达满意、感谢、喜爱、期待等积极情绪
-    - negative：表达不满、抱怨、愤怒、失望、焦虑等消极情绪
-    - neutral：无明显情感倾向的陈述或提问
-    - score 表示置信度，越接近 1 越确定
-
-  # 语气映射表：情感 -> 回复语气指引
-  tone_map:
-    positive: "热情、积极、给予肯定和鼓励"
-    negative: "共情、温和、安抚，先理解对方情绪再回应"
-    neutral: "客观、清晰、专业"
-
-  # 语气指引模板（供系统 prompt 注入）
-  # 占位符：{label} {score} {tone}
-  tone_guidance_template: "当前用户情感倾向: {label}（置信度 {score:.2f}），回复语气应: {tone}。"
-
-  # 规则兜底用的中文正面情感词典
-  positive_words:
-    - "开心"
-    - "高兴"
-    - "快乐"
-    - "满意"
-    - "感谢"
-    - "谢谢"
-    - "喜欢"
-    - "棒"
-    - "赞"
-    - "好用"
-    - "优秀"
-    - "完美"
-    - "太好了"
-    - "兴奋"
-    - "期待"
-    - "爱了"
-    - "点赞"
-
-  # 规则兜底用的中文负面情感词典
-  negative_words:
-    - "难过"
-    - "伤心"
-    - "生气"
-    - "愤怒"
-    - "失望"
-    - "糟糕"
-    - "烦"
-    - "崩溃"
-    - "投诉"
-    - "不满"
-    - "有问题"
-    - "出错"
-    - "失败"
-    - "痛"
-    - "焦虑"
-    - "抑郁"
-    - "担心"
-    - "害怕"
-    - "讨厌"
-    - "垃圾"

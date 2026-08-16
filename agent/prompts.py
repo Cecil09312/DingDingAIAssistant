@@ -1,13 +1,11 @@
 """智能体 Prompt 模板。
 
-包含系统 prompt、RAG 路由判断 prompt、情感语气适配、
+包含系统 prompt、RAG 路由判断 prompt、
 记忆分节注入（用户画像/已知事实/历史摘要）与关键信息抽取 prompt。
 """
 
 # 主系统 prompt 模板，由各占位符动态填充
 SYSTEM_PROMPT_TEMPLATE = """你是一个钉钉 AI 智能体助手，友好、专业地为用户解答问题、提供建议。
-
-{tone_guidance}
 
 {memory_section}
 
@@ -41,14 +39,12 @@ def _truncate_to_budget(text: str, budget: int) -> str:
 
 
 def build_system_prompt(
-    tone_guidance: str = "",
     long_term_context: str = "",
     rag_context: str = "",
 ) -> str:
     """组装最终系统 prompt。
 
     Args:
-        tone_guidance: 情感语气指引文案
         long_term_context: 长期记忆上下文（已由 build_memory_context 分节格式化）
         rag_context: RAG 检索到的上下文（按预算截断）
 
@@ -67,7 +63,6 @@ def build_system_prompt(
     memory_instruction = MEMORY_INSTRUCTION if long_term_context else ""
     rag_section = f"【参考资料】\n{rag_context}" if rag_context else ""
     return SYSTEM_PROMPT_TEMPLATE.format(
-        tone_guidance=tone_guidance,
         memory_section=memory_section,
         rag_section=rag_section,
         memory_instruction=memory_instruction,
@@ -130,29 +125,3 @@ TOOL_KEYWORDS = [
     "取消会议", "修改会议", "查询待办", "查询会议", "我的待办",
     "我的会议", "日程", "会议安排",
 ]
-
-
-# P1 优化：合并情感分析 + 路由判断为一次 LLM 调用的 prompt
-EMOTION_ROUTE_PROMPT = """请同时分析用户消息的情感倾向和处理路由，只输出一个 JSON 对象。
-
-情感分类：
-- positive: 满意、感谢、喜爱、期待
-- negative: 不满、抱怨、愤怒、失望
-- neutral: 陈述、提问
-
-路由判断：
-- rag: 询问功能、方法、政策、文档、知识等可从知识库回答的问题
-- web: 询问最新新闻、天气、实时信息等需要联网的问题
-- chat: 闲聊、问候、简单问答
-- tool: 需要执行操作（创建/查询/取消/修改 待办或会议）
-
-tool 判断规则：
-- "提醒我/创建待办/帮我记一下"等待办操作 → tool
-- "预定会议/创建会议/约个会/取消会议/修改会议/查询会议/查询待办"等操作 → tool
-- 纯知识问答不选 tool
-
-路由优先级：tool（明确操作意图）> rag > web > chat，不确定时选 rag 而非 chat。
-
-只输出 JSON，格式：{{"emotion": "positive|negative|neutral", "route": "rag|web|chat|tool"}}
-
-用户消息：{input}"""

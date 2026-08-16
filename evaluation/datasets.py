@@ -21,9 +21,9 @@ class EvalSample(TypedDict):
 RAG_EVAL_DATASET: List[EvalSample] = [
     {
         "question": "钉钉AI智能体助手支持哪些核心功能？",
-        "expected_answer": "支持情感分析、智能问答、RAG检索增强生成、短期与长期记忆、智能体评估等功能。",
-        "reference_context": "钉钉AI智能体助手基于LangChain和LangGraph构建，支持情感分析、智能问答、RAG检索增强生成、短期记忆与长期记忆（SQLite），并提供LangSmith与OpenEvals评估能力。",
-        "reference_docs": ["钉钉AI智能体助手基于LangChain和LangGraph构建，支持情感分析、智能问答、RAG检索增强生成。"],
+        "expected_answer": "支持智能问答、RAG检索增强生成、短期与长期记忆、智能体评估等功能。",
+        "reference_context": "钉钉AI智能体助手基于LangChain和LangGraph构建，支持智能问答、RAG检索增强生成、短期记忆与长期记忆（SQLite），并提供LangSmith与OpenEvals评估能力。",
+        "reference_docs": ["钉钉AI智能体助手基于LangChain和LangGraph构建，支持智能问答、RAG检索增强生成。"],
     },
     {
         "question": "智能体的长期记忆使用什么存储？",

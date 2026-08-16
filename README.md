@@ -1,13 +1,13 @@
 # 钉钉AI智能体助手
 
-基于 **LangChain + LangGraph** 构建的企业级 AI 智能体助手，集成情感分析、多模态 RAG 智能问答（含联网搜索）、质量评估、短/长期记忆（短期窗口预算+超窗压缩摘要；长期结构化记忆：用户画像/关键事实/分层摘要，优先级加载与上下文预算控制）、智能体评估（LangSmith + OpenEvals）、钉钉工具调用（待办管理/会议管理，自然语言驱动操作）。钉钉收发消息能力以独立 Agent Skill 形式提供（`.qoder/skills/dingtalk-messaging`，不侵入项目源码）。
+基于 **LangChain + LangGraph** 构建的企业级 AI 智能体助手，集成多模态 RAG 智能问答（含联网搜索）、质量评估、短/长期记忆（短期窗口预算+超窗压缩摘要；长期结构化记忆：用户画像/关键事实/分层摘要，优先级加载与上下文预算控制）、智能体评估（LangSmith + OpenEvals）、钉钉工具调用（待办管理/会议管理，自然语言驱动操作）。钉钉收发消息能力以独立 Agent Skill 形式提供（`.qoder/skills/dingtalk-messaging`，不侵入项目源码）。
 
 ## 架构图
 
 ```mermaid
 graph TB
     A[Web 聊天界面 /api/chat] --> D[LangGraph 智能体]
-    D --> E[情感分析 + 路由判断 合并节点]
+    D --> E[路由判断节点]
     E -->|知识库| G[RAG 检索节点]
     E -->|联网搜索| W[Web 搜索节点]
     E -->|闲聊| H[生成节点]
@@ -29,7 +29,6 @@ graph TB
 
 | 模块 | 说明 |
 |------|------|
-| 情感分析 | LLM 结构化分类（正面/负面/中性）+ 关键词兜底，影响回复语气 |
 | 智能问答 | 多模态 RAG 检索增强生成，三路路由（知识库/联网搜索/闲聊），两阶段检索（向量召回 top-20 + CrossEncoder 重排序 top-k） |
 | 联网搜索 | DuckDuckGo（主）+ 百度（备）双引擎，最新信息、实时资讯、天气新闻等 |
 | RAG 质量评估 | OpenEvals 检索相关性、忠实度、帮助度、答案相关性 |
@@ -184,8 +183,7 @@ docker compose restart                     # 重启服务
 │   │   └── time_parser.py  # 自然语言时间解析
 │   ├── query_rewrite.py    # 查询改写（P2，默认关闭）
 │   ├── safety.py           # 输入安全过滤（P3，默认关闭）
-│   └── rate_limiter.py     # 限流与熔断（P3，默认关闭）
-├── emotion/analyzer.py     # 情感分析
+│   ├── rate_limiter.py     # 限流与熔断（P3，默认关闭）
 ├── rag/                    # 多模态 RAG 模块
 │   ├── embeddings.py       # 多模态 Embedding（Jina CLIP v2）
 │   ├── vectorstore.py      # ChromaDB 封装（文本+图像）

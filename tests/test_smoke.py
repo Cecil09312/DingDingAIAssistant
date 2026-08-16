@@ -25,22 +25,6 @@ def test_config_import():
     print("[OK] config.settings 导入与读取正常")
 
 
-def test_emotion_rule_based():
-    """测试情感分析规则兜底（不依赖 LLM）。"""
-    from emotion.analyzer import _rule_based_analyze
-
-    r = _rule_based_analyze("我很开心，谢谢！")
-    assert r["label"] == "positive"
-    assert r["score"] > 0
-
-    r = _rule_based_analyze("太糟糕了，我很生气")
-    assert r["label"] == "negative"
-
-    r = _rule_based_analyze("今天天气不错")
-    assert r["label"] == "neutral"
-    print("[OK] emotion 规则兜底分析正常")
-
-
 def _cleanup_memory_test(conn, uid: str) -> None:
     """清理记忆测试产生的临时数据。"""
     from memory import long_term as lt
@@ -345,7 +329,6 @@ def test_multimodal_vectorstore():
 def main():
     tests = [
         test_config_import,
-        test_emotion_rule_based,
         test_memory_rule_extraction_and_context,
         test_memory_budget_control,
         test_short_window_compression,

@@ -9,14 +9,6 @@ from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
 
 
-class EmotionInfo(TypedDict):
-    """情感分析结果（存储于状态中）。"""
-
-    label: str   # positive / negative / neutral
-    score: float
-    tone: str
-
-
 class AgentState(TypedDict):
     """LangGraph 智能体状态。
 
@@ -31,8 +23,6 @@ class AgentState(TypedDict):
     # 用户标识与会话标识
     user_id: str
     session_id: str
-    # 情感分析结果
-    emotion: Optional[EmotionInfo]
     # 路由判断结果："rag" / "web" / "chat"
     search_route: str
     # RAG 检索结果（也用于联网搜索结果）
@@ -60,4 +50,4 @@ class AgentState(TypedDict):
     confirmation_context: dict
 
 
-__all__ = ["AgentState", "EmotionInfo"]
+__all__ = ["AgentState"]
