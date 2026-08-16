@@ -1,0 +1,22 @@
+# 数据与密钥不打进镜像：运行时通过卷与 env_file 注入
+.env
+data/
+.git/
+.gitignore
+# 排除 repowiki 文档（体积大，运行时不需要），保留 skills（工具调用依赖 dingtalk_lib.py）
+.qoder/repowiki/
+
+# Python 缓存
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# 测试与文档
+tests/
+*.md
+
+# IDE
+.idea/
+.vscode/
