@@ -1,0 +1,46 @@
+# ===== 核心框架 =====
+langchain>=1.2.4
+langchain-core>=1.2.7
+langchain-community>=0.4.1
+langchain-openai>=1.1.7
+langchain-text-splitters>=1.1.0
+langchain-huggingface>=1.2.0
+langgraph>=1.0.6
+langgraph-checkpoint>=4.1.1
+
+# ===== 模型与向量库 =====
+openai>=1.66.5
+chromadb>=0.5.0
+sentence-transformers>=2.7.0
+huggingface-hub>=0.34.0,<1.0
+transformers>=4.40.0
+torch>=2.0.0
+einops>=0.7.0
+numpy>=1.24.0
+pillow>=10.0.0
+# 多路召回 BM25 关键词检索（可选，RAG_BM25_ENABLED=true 时需要）
+rank-bm25>=0.2.2
+# jina-clip-v2 的自定义建模代码（trust_remote_code）依赖 timm 视觉骨干网络
+timm>=1.0.0
+
+# ===== 多模态文档处理 =====
+pypdf>=6.0
+pypdfium2>=4.0
+python-docx>=1.0
+openpyxl>=3.1
+easyocr>=1.7
+
+
+# ===== Web 服务 =====
+fastapi>=0.115.0
+uvicorn>=0.34.0
+python-multipart>=0.0.29
+httpx>=0.28.0
+
+# ===== 配置与数据 =====
+pydantic>=2.10.0
+pydantic-settings>=2.14.0
+
+# ===== 评估 =====
+langsmith>=0.6.3
+openevals>=0.1.3

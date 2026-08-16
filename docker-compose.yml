@@ -1,0 +1,25 @@
+# 钉钉AI智能体助手 Docker 部署
+# 构建：docker compose build
+# 启动：docker compose up -d
+services:
+  agent:
+    build: .
+    ports:
+      - "8000:8000"
+    # 真实凭证（LLM_API_KEY 等）通过 env_file 注入，不打进镜像
+    env_file:
+      - .env
+    volumes:
+      # 持久化：长期记忆 SQLite / ChromaDB 向量库 / 知识文档
+      - ./data:/app/data
+    # 让容器可以访问宿主机网络：通过 host.docker.internal 即可访问宿主机上的服务
+    # Windows/Mac Docker Desktop 默认支持；Linux 需通过 host-gateway 显式映射
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
