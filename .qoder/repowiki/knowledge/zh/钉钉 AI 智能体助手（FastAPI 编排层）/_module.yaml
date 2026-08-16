@@ -1,0 +1,13 @@
+schema_version: 1
+module_path: ""
+title: 钉钉 AI 智能体助手（FastAPI 编排层）
+scope:
+    - .gitignore
+    - requirements.txt
+    - main.py
+    - ingest_result.txt
+    - README.md
+    - 需求分析文档.md
+source_files: []
+depends_on: []
+related_to: []

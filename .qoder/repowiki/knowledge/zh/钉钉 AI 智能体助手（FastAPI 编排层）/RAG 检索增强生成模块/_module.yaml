@@ -1,0 +1,9 @@
+schema_version: 1
+module_path: rag
+title: RAG 检索增强生成模块
+scope:
+    - rag/
+source_files: []
+depends_on: []
+related_to:
+    - path: agent

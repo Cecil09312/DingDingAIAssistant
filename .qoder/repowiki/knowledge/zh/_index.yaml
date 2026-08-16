@@ -1,0 +1,55 @@
+# 知识卡导出索引文件
+schema_version: 1
+locale: zh-CN
+branch: Q0DeR-MaG1C-BrAnCh-Fo2-NoN-GiT-Or-No-C0MmIt
+nodes_managed: true
+exported_at: "2026-08-09T10:29:57Z"
+modules:
+    "":
+        dir_name: 钉钉 AI 智能体助手（FastAPI 编排层）
+        title: 钉钉 AI 智能体助手（FastAPI 编排层）
+        scope:
+            - .gitignore
+            - requirements.txt
+            - main.py
+            - ingest_result.txt
+            - README.md
+            - 需求分析文档.md
+        source_files: []
+        children:
+            - agent
+            - evaluation
+            - rag
+        depends_on: []
+        related_to: []
+    agent:
+        dir_name: LangGraph 智能体工作流（情感分析·RAG路由·记忆管理）
+        title: LangGraph 智能体工作流（情感分析·RAG路由·记忆管理）
+        scope:
+            - agent/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: evaluation
+            - path: rag
+    evaluation:
+        dir_name: 智能体与 RAG 评估模块
+        title: 智能体与 RAG 评估模块
+        scope:
+            - evaluation/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: agent
+    rag:
+        dir_name: RAG 检索增强生成模块
+        title: RAG 检索增强生成模块
+        scope:
+            - rag/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: agent
