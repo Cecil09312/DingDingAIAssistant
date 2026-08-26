@@ -18,10 +18,6 @@ if not os.environ.get("HF_ENDPOINT"):
 # 本地已有缓存时启用离线模式可完全跳过网络请求；如需下载则不设此变量
 # os.environ["HF_HUB_OFFLINE"] = "1"
 
-# 禁用 ChromaDB 匿名遥测（posthog 版本不兼容会导致 ERROR 日志噪音，不影响功能）
-if not os.environ.get("ANONYMIZED_TELEMETRY"):
-    os.environ["ANONYMIZED_TELEMETRY"] = "false"
-
 import argparse
 import asyncio
 import json
@@ -85,18 +81,16 @@ def warmup_llm():
 def warmup_vectorstore():
     """启动时检查向量库，如果为空则自动入库（后台线程，不阻塞启动）。
 
-    内存模式（CHROMA_PERSIST_DIR 为空）下每次重启都需要重新入库；
-    持久化模式下已有数据则跳过。
+    Milvus Lite 本地文件持久化：已有数据则跳过，为空则自动入库。
     """
     import threading
 
     def _do_warmup():
         try:
-            from rag.vectorstore import get_vectorstore
+            from rag.vectorstore import count_documents
             from rag.ingest import ingest
 
-            vs = get_vectorstore()
-            count = vs._collection.count()
+            count = count_documents()
             if count == 0:
                 logger.info("[warmup] 向量库为空，开始自动入库...")
                 n = ingest(rebuild=False)

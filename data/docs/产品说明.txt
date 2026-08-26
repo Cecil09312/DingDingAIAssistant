@@ -7,7 +7,7 @@
 1. LangChain：用于构建应用逻辑与 LLM 调用链路。
 2. LangGraph：用于实现智能体的状态图（StateGraph）工作流编排，支持多步骤推理与决策路由。
 3. 千问大模型：通过 OpenAI 兼容接口调用，作为底层生成与推理模型。
-4. ChromaDB：用于向量存储与语义检索。
+4. Milvus Lite：用于向量存储与语义检索（本地文件持久化，无需独立部署服务）。
 5. HuggingFace bge-small-zh-v1.5：本地 Embedding 模型，中文检索效果好。
 6. SQLite：用于长期记忆的持久化存储（Python 内置，无需外部服务）。
 7. OpenEvals 与 LangSmith：用于智能体评估与质量评测。
@@ -17,7 +17,7 @@
    - 实现基于 RAG（检索增强生成）的智能问答功能。
    - 包含文档加载、文本切分、向量化存储、语义检索与生成式回答的完整 pipeline。
    - 文档加载支持 txt、md 等格式，使用 RecursiveCharacterTextSplitter 进行切分。
-   - 向量存储使用 ChromaDB，Embedding 使用本地 HuggingFace 模型。
+   - 向量存储使用 Milvus Lite（本地文件持久化），Embedding 使用本地 HuggingFace 模型。
    - RAG 质量评估包含检索相关性评估与生成质量评估（答案忠实度、相关性打分）。
 
 2. 记忆系统：

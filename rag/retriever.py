@@ -1,7 +1,7 @@
 """检索器：向量检索 + 重排序 + 上下文格式化。
 
 两阶段检索流程：
-1. 向量检索（ChromaDB + Jina CLIP v2）召回 top-N 候选
+1. 向量检索（Milvus + Embedding 模型）召回 top-N 候选
 2. CrossEncoder（BAAI/bge-reranker-base）对候选精排，取 top-k
 3. 格式化为上下文字符串供生成节点使用
 

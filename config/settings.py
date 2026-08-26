@@ -51,9 +51,15 @@ class Settings(BaseSettings):
     embedding_model: str = "jinaai/jina-clip-v2"
     embedding_device: str = "cpu"
 
-    # ===== 向量库 =====
-    chroma_persist_dir: str = "data/chroma"
-    chroma_collection: str = "dingtalk_kb"
+    # ===== 向量库（Milvus Lite 本地文件持久化）=====
+    # Milvus Lite 数据库文件路径（指向本地 .db 文件即启用 Milvus Lite，无需独立部署服务）
+    milvus_uri: str = "data/milvus/milvus_lite.db"
+    # Milvus collection 名称
+    milvus_collection: str = "dingtalk_kb"
+    # 索引类型（Milvus Lite 仅支持 FLAT）
+    milvus_index_type: str = "FLAT"
+    # 距离度量类型（L2=欧氏距离，越小越相关）
+    milvus_metric_type: str = "L2"
     rag_top_k: int = 4
     # 检索分数过滤阈值（低于此值的文档丢弃，bge 距离越小越相关）
     rag_score_filter: float = 1.2
@@ -163,12 +169,12 @@ class Settings(BaseSettings):
         return [kw.strip() for kw in self.input_blocked_keywords.split(",") if kw.strip()]
 
     @property
-    def chroma_persist_path(self) -> Path:
-        """返回向量库持久化的绝对路径。"""
-        p = Path(self.chroma_persist_dir)
+    def milvus_db_path(self) -> Path:
+        """返回 Milvus Lite 数据库文件的绝对路径（父目录自动创建）。"""
+        p = Path(self.milvus_uri)
         if not p.is_absolute():
             p = PROJECT_ROOT / p
-        p.mkdir(parents=True, exist_ok=True)
+        p.parent.mkdir(parents=True, exist_ok=True)
         return p
 
     @property

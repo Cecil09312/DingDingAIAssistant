@@ -310,7 +310,7 @@ pre_check (qa_match 问答缓存匹配 + route 路由判断)
 
 向量检索对专有名词、编号、代码片段不敏感时，BM25 关键词检索互补：
 
-- 新增模块 `rag/bm25.py`：从 Chroma 拉取文本文档构建内存 BM25 索引（字符级分词，无需 jieba）
+- 新增模块 `rag/bm25.py`：从 Milvus 拉取文本文档构建内存 BM25 索引（字符级分词，无需 jieba）
 - `retrieve` 函数在 `rag_bm25_enabled=true` 时并行执行向量检索 + BM25 检索
 - RRF (Reciprocal Rank Fusion) 融合两路结果：`score(d) = sum(1/(k+rank))`，仅依赖排名不依赖原始分数
 - 内容相同的 chunk 合并分数（两路都命中的文档得分更高）

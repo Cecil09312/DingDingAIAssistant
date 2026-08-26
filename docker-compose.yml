@@ -10,7 +10,7 @@ services:
     env_file:
       - .env
     volumes:
-      # 持久化：长期记忆 SQLite / ChromaDB 向量库 / 知识文档
+      # 持久化：长期记忆 SQLite / Milvus 向量库 / 知识文档
       - ./data:/app/data
     # 让容器可以访问宿主机网络：通过 host.docker.internal 即可访问宿主机上的服务
     # Windows/Mac Docker Desktop 默认支持；Linux 需通过 host-gateway 显式映射

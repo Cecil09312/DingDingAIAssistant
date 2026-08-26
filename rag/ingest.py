@@ -15,7 +15,7 @@ from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from config.settings import get_settings
-from rag.vectorstore import add_documents, add_image_documents, get_vectorstore
+from rag.vectorstore import add_documents, add_image_documents, drop_collection
 
 logger = logging.getLogger(__name__)
 
@@ -222,8 +222,8 @@ def ingest(rebuild: bool = False) -> int:
 
     if rebuild:
         try:
-            vs = get_vectorstore()
-            vs.delete_collection()
+            # 删除并重建 Milvus collection（清空旧索引）
+            drop_collection()
             print("[ingest] 已清空旧索引")
         except Exception as e:
             print(f"[ingest] 清空索引跳过: {e}")

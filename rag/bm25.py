@@ -1,6 +1,6 @@
 """BM25 关键词检索（内存索引，与向量检索互补）。
 
-从 Chroma 向量库拉取全部文本文档构建 BM25 索引，
+从 Milvus 向量库拉取全部文本文档构建 BM25 索引，
 检索时返回 (Document, score) 列表，score 越大越相关。
 
 中文分词采用字符级切分，无需额外分词依赖；
@@ -30,21 +30,18 @@ def get_bm25_index():
         return _bm25_index, _bm25_docs
 
     try:
-        from rag.vectorstore import get_vectorstore
+        # 通过 MilvusClient.query 拉取全部文本文档（已跳过图像文档）
+        from rag.vectorstore import get_all_text_documents
 
-        vs = get_vectorstore()
-        collection = vs._collection
-        result = collection.get()
+        all_docs = get_all_text_documents()
     except Exception as e:
         logger.warning("[bm25] 从向量库拉取文档失败: %s", e)
         return None, []
 
     _bm25_docs = []
     texts: List[str] = []
-    documents = result.get("documents", []) or []
-    metadatas = result.get("metadatas", []) or []
-    for doc_text, meta in zip(documents, metadatas):
-        # 跳过图像文档（page_content 为占位描述，无检索价值）
+    for doc_text, meta in all_docs:
+        # get_all_text_documents 已过滤图像文档与空文本，此处保留双重过滤逻辑
         if meta and meta.get("type") == "image":
             continue
         if not doc_text or not doc_text.strip():

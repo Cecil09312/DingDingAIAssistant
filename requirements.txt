@@ -10,7 +10,11 @@ langgraph-checkpoint>=4.1.1
 
 # ===== 模型与向量库 =====
 openai>=1.66.5
-chromadb>=0.5.0
+# Milvus Lite 本地向量库（pymilvus 内置 Milvus Lite，无需独立部署服务）
+pymilvus>=3.0.0
+langchain-milvus>=0.4.0
+# Milvus Lite 子包：启用本地 .db 文件存储（pymilvus 用本地 uri 时的必需依赖）
+milvus-lite>=3.0.0
 sentence-transformers>=2.7.0
 huggingface-hub>=0.34.0,<1.0
 transformers>=4.40.0

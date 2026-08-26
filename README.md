@@ -20,7 +20,7 @@ graph TB
     I --> J[返回回答]
     D --> K[短期记忆 Checkpointer]
     D --> L[长期记忆 SQLite]
-    G --> M[ChromaDB 向量库]
+    G --> M[Milvus 向量库]
     W --> N[DuckDuckGo + 百度搜索]
     T --> O[钉钉开放平台 API]
 ```
@@ -186,7 +186,7 @@ docker compose restart                     # 重启服务
 │   ├── rate_limiter.py     # 限流与熔断（P3，默认关闭）
 ├── rag/                    # 多模态 RAG 模块
 │   ├── embeddings.py       # 多模态 Embedding（Jina CLIP v2）
-│   ├── vectorstore.py      # ChromaDB 封装（文本+图像）
+│   ├── vectorstore.py      # Milvus 封装（文本+图像）
 │   ├── retriever.py        # 检索器（向量检索+重排序）
 │   ├── reranker.py         # CrossEncoder 重排序
 │   ├── web_search.py      # 联网搜索（DuckDuckGo+百度）
@@ -223,7 +223,7 @@ docker compose restart                     # 重启服务
 ## 技术栈
 - LangChain 1.x / LangGraph 1.x
 - langchain-openai（千问 OpenAI 兼容接口）
-- ChromaDB + BAAI/bge-small-zh-v1.5（纯文本 Embedding，512 维，中文优化）
+- Milvus Lite + BAAI/bge-small-zh-v1.5（纯文本 Embedding，512 维，中文优化，本地文件持久化）
 - BAAI/bge-reranker-base（CrossEncoder 两阶段检索重排序）
 - rank-bm25（BM25 关键词检索，多路召回，默认关闭）
 - DuckDuckGo + 百度搜索（联网搜索双引擎，国内可用）
