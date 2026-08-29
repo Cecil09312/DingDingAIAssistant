@@ -1,38 +1,81 @@
 # 知识卡导出索引文件
 schema_version: 1
 locale: zh-CN
-branch: Q0DeR-MaG1C-BrAnCh-Fo2-NoN-GiT-Or-No-C0MmIt
+branch: main
 nodes_managed: true
-exported_at: "2026-08-09T10:29:57Z"
+exported_at: "2026-08-29T12:17:51Z"
 modules:
     "":
-        dir_name: 钉钉 AI 智能体助手（FastAPI 编排层）
-        title: 钉钉 AI 智能体助手（FastAPI 编排层）
+        dir_name: 钉钉 AI 智能体助手服务
+        title: 钉钉 AI 智能体助手服务
         scope:
-            - .gitignore
             - requirements.txt
             - main.py
+            - Dockerfile
+            - docker-compose.yml
+            - .gitignore
+            - .dockerignore
             - ingest_result.txt
-            - README.md
             - 需求分析文档.md
+            - .env.example
+            - Agent兜底方案.md
+            - Docker部署指南.md
+            - README.md
+            - description
         source_files: []
         children:
             - agent
+            - data_and_storage
             - evaluation
             - rag
         depends_on: []
         related_to: []
     agent:
-        dir_name: LangGraph 智能体工作流（情感分析·RAG路由·记忆管理）
-        title: LangGraph 智能体工作流（情感分析·RAG路由·记忆管理）
+        dir_name: LangGraph 智能体编排与策略层
+        title: LangGraph 智能体编排与策略层
         scope:
             - agent/
+        source_files: []
+        children:
+            - agent/orchestration
+            - agent/policy
+        depends_on: []
+        related_to: []
+    agent/orchestration:
+        dir_name: LangGraph 智能体编排与节点
+        title: LangGraph 智能体编排与节点
+        scope:
+            - agent/graph.py
+            - agent/nodes.py
+            - agent/state.py
         source_files: []
         children: []
         depends_on: []
         related_to:
+            - path: agent/policy
             - path: evaluation
-            - path: rag
+            - path: rag/retrieval
+    agent/policy:
+        dir_name: Agent 安全过滤、限流熔断与查询改写
+        title: Agent 安全过滤、限流熔断与查询改写
+        scope:
+            - agent/safety.py
+            - agent/rate_limiter.py
+            - agent/query_rewrite.py
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: agent/orchestration
+    data_and_storage:
+        dir_name: 本地向量知识库与文档持久化存储
+        title: 本地向量知识库与文档持久化存储
+        scope:
+            - data/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
     evaluation:
         dir_name: 智能体与 RAG 评估模块
         title: 智能体与 RAG 评估模块
@@ -42,14 +85,54 @@ modules:
         children: []
         depends_on: []
         related_to:
-            - path: agent
+            - path: agent/orchestration
     rag:
         dir_name: RAG 检索增强生成模块
         title: RAG 检索增强生成模块
         scope:
             - rag/
         source_files: []
+        children:
+            - rag/embeddings_and_vectorstore
+            - rag/ingestion
+            - rag/retrieval
+        depends_on: []
+        related_to: []
+    rag/embeddings_and_vectorstore:
+        dir_name: RAG 嵌入与向量检索层
+        title: RAG 嵌入与向量检索层
+        scope:
+            - rag/embeddings.py
+            - rag/vectorstore.py
+            - rag/bm25.py
+        source_files: []
         children: []
         depends_on: []
         related_to:
-            - path: agent
+            - path: rag/ingestion
+            - path: rag/retrieval
+    rag/ingestion:
+        dir_name: RAG 文档增量入库与 OCR 处理
+        title: RAG 文档增量入库与 OCR 处理
+        scope:
+            - rag/ingest.py
+            - rag/file_watcher.py
+            - rag/ocr.py
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: rag/embeddings_and_vectorstore
+    rag/retrieval:
+        dir_name: RAG 检索与重排序模块
+        title: RAG 检索与重排序模块
+        scope:
+            - rag/retriever.py
+            - rag/reranker.py
+            - rag/web_search.py
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: agent/orchestration
+            - path: rag/embeddings_and_vectorstore

@@ -1,9 +1,0 @@
-schema_version: 1
-module_path: evaluation
-title: 智能体与 RAG 评估模块
-scope:
-    - evaluation/
-source_files: []
-depends_on: []
-related_to:
-    - path: agent
