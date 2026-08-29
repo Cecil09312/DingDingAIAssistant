@@ -88,15 +88,24 @@ def warmup_vectorstore():
     def _do_warmup():
         try:
             from rag.vectorstore import count_documents
-            from rag.ingest import ingest
+            from rag.ingest import ingest, load_manifest
 
             count = count_documents()
-            if count == 0:
-                logger.info("[warmup] 向量库为空，开始自动入库...")
-                n = ingest(rebuild=False)
-                logger.info(f"[warmup] 自动入库完成，共 {n} 个 chunk")
+            manifest = load_manifest()
+            if count == 0 and manifest:
+                # 向量库为空但存在入库清单：数据库被清空，需全量重建以恢复一致性
+                logger.info("[warmup] 向量库为空但存在入库清单，触发全量重建...")
+                n = ingest(rebuild=True)
+                logger.info(f"[warmup] 全量重建完成，共 {n} 个 chunk")
             else:
-                logger.info(f"[warmup] 向量库已有 {count} 个文档，跳过入库")
+                # 正常增量检查：扫描文件指纹差异，仅更新新增/修改/删除的文件
+                n = ingest(rebuild=False)
+                if n > 0:
+                    logger.info(f"[warmup] 增量入库完成，本次新增/更新 {n} 个 chunk")
+                elif count == 0:
+                    logger.info("[warmup] 向量库为空且无文档可入库")
+                else:
+                    logger.info(f"[warmup] 向量库已是最新（{count} 个文档），跳过入库")
 
             # BM25 索引预热（开启多路召回时，避免首请求阻塞）
             from config.settings import get_settings
@@ -112,6 +121,14 @@ def warmup_vectorstore():
                         logger.info("[warmup] BM25 索引为空（向量库无文本文档）")
                 except Exception as e:
                     logger.warning(f"[warmup] BM25 索引预热失败（不影响启动）: {e}")
+
+            # 启动文件监听（运行时知识库变更自动同步，无需重启服务）
+            try:
+                from rag.file_watcher import start_file_watcher
+
+                start_file_watcher()
+            except Exception as e:
+                logger.warning(f"[warmup] 文件监听启动失败（不影响启动）: {e}")
         except Exception as e:
             logger.warning(f"[warmup] 向量库初始化失败（不影响启动）: {e}")
 

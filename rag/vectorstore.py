@@ -9,6 +9,7 @@
 """
 
 import logging
+import threading
 import uuid
 from typing import List, Tuple
 
@@ -20,6 +21,9 @@ logger = logging.getLogger(__name__)
 
 # 模块级 LangChain Milvus 向量库单例（延迟初始化，避免启动时连接）
 _vs = None
+# 写入锁：保护 add/delete 操作，避免文件监听消费线程与检索路径并发写入冲突
+# 检索（search）为读操作，Milvus Lite 支持读写并发，无需加锁
+_write_lock = threading.Lock()
 
 
 def get_vectorstore():
@@ -39,7 +43,18 @@ def get_vectorstore():
         _vs = Milvus(
             collection_name=settings.milvus_collection,
             embedding_function=get_embeddings(),
-            connection_args={"uri": str(settings.milvus_db_path)},
+            connection_args={
+                "uri": str(settings.milvus_db_path),
+                # Milvus Lite gRPC keepalive 配置：
+                # BGE 模型首次加载耗时较长，期间 gRPC 连接空闲 keepalive ping 过频会触发
+                # Milvus Lite server 的 too_many_pings GOAWAY 断连，此处禁用无调用时的 ping
+                "grpc_options": {
+                    "grpc.keepalive_permit_without_calls": 0,
+                    "grpc.http2_max_pings_without_data": 0,
+                    "grpc.keepalive_time_ms": 60000,
+                    "grpc.keepalive_timeout_ms": 10000,
+                },
+            },
             index_params={
                 "index_type": settings.milvus_index_type,
                 "metric_type": settings.milvus_metric_type,
@@ -78,14 +93,16 @@ def add_documents(docs: List[Document]) -> List[str]:
     for d in docs:
         meta = {k: v for k, v in d.metadata.items() if v is not None}
         clean_docs.append(Document(page_content=d.page_content, metadata=meta))
-    vs.add_documents(clean_docs, ids=ids)
-    # Milvus 需显式 flush 确保写入磁盘并可查询
-    try:
-        from config.settings import get_settings
+    # 写入加锁，避免与文件监听消费线程并发写入冲突
+    with _write_lock:
+        vs.add_documents(clean_docs, ids=ids)
+        # Milvus 需显式 flush 确保写入磁盘并可查询
+        try:
+            from config.settings import get_settings
 
-        vs.client.flush(get_settings().milvus_collection)
-    except Exception as e:
-        logger.warning("Milvus flush 失败（不影响内存可用）: %s", e)
+            vs.client.flush(get_settings().milvus_collection)
+        except Exception as e:
+            logger.warning("Milvus flush 失败（不影响内存可用）: %s", e)
     return ids
 
 
@@ -137,9 +154,10 @@ def add_image_documents(docs: List[Document]) -> List[str]:
         entities.append(entity)
         ids.append(doc_id)
 
-    # 批量插入图像实体（含预计算的图像向量，绕过文本 Embedding 路径）
-    vs.client.insert(settings.milvus_collection, entities)
-    vs.client.flush(settings.milvus_collection)
+    # 写入加锁，避免与文件监听消费线程并发写入冲突
+    with _write_lock:
+        vs.client.insert(settings.milvus_collection, entities)
+        vs.client.flush(settings.milvus_collection)
     return ids
 
 
@@ -202,6 +220,29 @@ def drop_collection() -> None:
     # 重置单例，使下次访问重新创建 collection
     global _vs
     _vs = None
+
+
+def delete_by_ids(ids: List[str]) -> None:
+    """按主键 id 列表删除向量库中的文档（用于增量更新时清理文件旧 chunk）。
+
+    Args:
+        ids: 待删除文档的 pk 列表（uuid 字符串）
+    """
+    if not ids:
+        return
+    vs = get_vectorstore()
+    # LangChain Milvus 的 delete 接受 ids 列表，内部构造 `pk in [...]` 表达式删除
+    str_ids = [str(i) for i in ids]
+    # 写入加锁，避免与文件监听消费线程并发写入冲突
+    with _write_lock:
+        try:
+            vs.delete(ids=str_ids)
+            # 删除后 flush 确保生效
+            from config.settings import get_settings
+
+            vs.client.flush(get_settings().milvus_collection)
+        except Exception as e:
+            logger.warning("按 id 删除文档失败: %s", e)
 
 
 def get_all_text_documents() -> List[Tuple[str, dict]]:

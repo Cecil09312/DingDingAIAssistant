@@ -1,12 +1,14 @@
-"""文档加载、切分与入库 CLI。
+"""文档加载、切分与入库 CLI（增量入库，文件指纹驱动）。
 
 支持格式：.txt .md .pdf .docx .xlsx .png .jpg .jpeg .bmp .tiff
 用法：
-    python -m rag.ingest               # 入库 data/docs/ 全部支持格式
-    python -m rag.ingest --rebuild      # 清空重建索引
+    python -m rag.ingest               # 增量入库：仅处理新增/修改/删除的文件
+    python -m rag.ingest --rebuild      # 清空重建索引（全量入库 + 重置清单）
 """
 
 import argparse
+import hashlib
+import json
 import logging
 import sys
 from pathlib import Path
@@ -15,7 +17,7 @@ from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from config.settings import get_settings
-from rag.vectorstore import add_documents, add_image_documents, drop_collection
+from rag.vectorstore import add_documents, add_image_documents, delete_by_ids, drop_collection
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +26,9 @@ SUPPORTED_EXTENSIONS = {".txt", ".md", ".pdf", ".docx", ".xlsx",
                          ".png", ".jpg", ".jpeg", ".bmp", ".tiff"}
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp", ".tiff"}
+
+# 文件清单文件名（记录每个文件的内容哈希与 chunk_ids，用于增量更新）
+MANIFEST_FILENAME = ".ingest_manifest.json"
 
 
 def load_text_file(filepath: Path) -> list[Document]:
@@ -178,7 +183,7 @@ def load_file(filepath: Path) -> list[Document]:
 
 
 def load_files(docs_dir: Path) -> list[Document]:
-    """加载 docs_dir 下所有支持格式的文件为 Document。"""
+    """加载 docs_dir 下所有支持格式的文件为 Document（全量加载，用于 rebuild 场景）。"""
     docs: list[Document] = []
     for fp in sorted(docs_dir.iterdir()):
         if fp.is_file() and fp.suffix.lower() in SUPPORTED_EXTENSIONS:
@@ -211,52 +216,186 @@ def split_documents(docs: list[Document]) -> list[Document]:
     return chunks
 
 
-def ingest(rebuild: bool = False) -> int:
-    """执行文档入库流程，返回入库 chunk 数。"""
-    settings = get_settings()
-    docs = load_files(settings.docs_dir)
+# ===== 文件清单（manifest）管理：记录每个文件的内容哈希与 chunk_ids，支撑增量更新 =====
+
+
+def _manifest_path() -> Path:
+    """返回清单文件绝对路径（与 docs_dir 同目录下的隐藏 JSON）。"""
+    return get_settings().docs_dir / MANIFEST_FILENAME
+
+
+def compute_file_hash(filepath: Path) -> str:
+    """计算文件内容 md5 哈希（按块读取，支持大文件）。"""
+    h = hashlib.md5()
+    with open(filepath, "rb") as f:
+        for block in iter(lambda: f.read(8192), b""):
+            h.update(block)
+    return h.hexdigest()
+
+
+def load_manifest() -> dict:
+    """读取文件清单。清单记录 {文件名: {"hash", "mtime", "chunk_ids"}}。"""
+    p = _manifest_path()
+    if not p.exists():
+        return {}
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except Exception as e:
+        logger.warning("读取 manifest 失败，视为空: %s", e)
+        return {}
+
+
+def save_manifest(manifest: dict) -> None:
+    """写入文件清单（UTF-8，便于人工排查）。"""
+    p = _manifest_path()
+    try:
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception as e:
+        logger.warning("写入 manifest 失败: %s", e)
+
+
+def ingest_one_file(filepath: Path) -> list[str]:
+    """加载、切分并入库单个文件，返回新增 chunk 的 id 列表。
+
+    文本块与图像块分别入库（图像块走多模态 Embedding 路径）。
+    """
+    docs = load_file(filepath)
     if not docs:
-        print(f"[ingest] 未在 {settings.docs_dir} 找到支持的文档")
-        print(f"[ingest] 支持格式: {', '.join(sorted(SUPPORTED_EXTENSIONS))}")
-        return 0
+        return []
+    chunks = split_documents(docs)
+    text_chunks = [c for c in chunks if c.metadata.get("type") != "image"]
+    image_chunks = [c for c in chunks if c.metadata.get("type") == "image"]
+    ids: list[str] = []
+    if text_chunks:
+        ids.extend(add_documents(text_chunks))
+    if image_chunks:
+        ids.extend(add_image_documents(image_chunks))
+    return ids
+
+
+def _scan_current_files() -> dict:
+    """扫描 docs_dir 下当前支持格式的文件，返回 {文件名: Path}。"""
+    docs_dir = get_settings().docs_dir
+    files = {}
+    if not docs_dir.exists():
+        return files
+    for fp in sorted(docs_dir.iterdir()):
+        if fp.is_file() and fp.suffix.lower() in SUPPORTED_EXTENSIONS:
+            files[fp.name] = fp
+    return files
+
+
+def ingest(rebuild: bool = False) -> int:
+    """增量入库：仅处理新增/修改/删除的文件，返回本次新增（含更新）的 chunk 数。
+
+    流程：
+      1. rebuild=True：drop_collection 清空索引 + 清空清单 → 全部文件视为新增
+      2. 扫描当前文件，对每个文件先比 mtime 再比 hash 判断是否变化
+      3. 新增/修改文件：（修改时先删旧 chunk）→ 重新入库 → 记录 chunk_ids
+      4. 未变化文件：跳过，沿用旧 chunk_ids
+      5. 清单中有但目录无（已删除文件）：按 chunk_ids 清理孤儿 chunk
+      6. 写回清单
+    """
+    settings = get_settings()
+    manifest = {}
 
     if rebuild:
         try:
             # 删除并重建 Milvus collection（清空旧索引）
             drop_collection()
-            print("[ingest] 已清空旧索引")
+            print("[ingest] 已清空旧索引，开始全量重建")
         except Exception as e:
             print(f"[ingest] 清空索引跳过: {e}")
+        manifest = {}
+    else:
+        manifest = load_manifest()
 
-    chunks = split_documents(docs)
+    current_files = _scan_current_files()
+    if not current_files:
+        print(f"[ingest] 未在 {settings.docs_dir} 找到支持的文档")
+        print(f"[ingest] 支持格式: {', '.join(sorted(SUPPORTED_EXTENSIONS))}")
+        # 即使无文档也写入空清单，避免残留
+        save_manifest({})
+        return 0
 
-    # 分离文本块和图像块
-    text_chunks = [c for c in chunks if c.metadata.get("type") != "image"]
-    image_chunks = [c for c in chunks if c.metadata.get("type") == "image"]
+    new_manifest: dict = {}
+    added_files = updated_files = skipped_files = deleted_files = 0
+    total_added = 0
 
-    # 入库文本块
-    text_ids = []
-    if text_chunks:
-        text_ids = add_documents(text_chunks)
+    # 处理新增 / 修改文件
+    for fname, fp in current_files.items():
+        old = manifest.get(fname)
+        mtime = fp.stat().st_mtime
+        # mtime 预筛：未变则直接沿用，跳过 hash 计算（快速路径）
+        if old and old.get("mtime") == mtime:
+            new_manifest[fname] = old
+            skipped_files += 1
+            continue
+        # mtime 变了，算 hash 确认内容是否真改
+        fhash = compute_file_hash(fp)
+        if old and old.get("hash") == fhash:
+            # mtime 变但内容未变（如 touch），沿用并更新 mtime
+            new_manifest[fname] = {**old, "mtime": mtime}
+            skipped_files += 1
+            continue
 
-    # 入库图像块
-    image_ids = []
-    if image_chunks:
-        image_ids = add_image_documents(image_chunks)
+        # 内容确实变化（新增或修改）
+        if old:
+            # 修改文件：先删除该文件旧 chunk，避免重复数据
+            try:
+                delete_by_ids(old.get("chunk_ids", []))
+            except Exception as e:
+                logger.warning("删除旧 chunk 失败 %s: %s", fname, e)
 
-    total = len(text_ids) + len(image_ids)
-    print(f"[ingest] 加载 {len(docs)} 个文档，切分为 {len(text_chunks)} 个文本块 + {len(image_chunks)} 个图像块，入库完成")
-    return total
+        try:
+            chunk_ids = ingest_one_file(fp)
+        except Exception as e:
+            logger.error("入库失败 %s: %s", fname, e)
+            # 失败时若原为修改文件，保留旧记录以便下次重试；新文件则不记录
+            if old:
+                new_manifest[fname] = old
+            continue
+
+        new_manifest[fname] = {
+            "hash": fhash,
+            "mtime": mtime,
+            "chunk_ids": chunk_ids,
+        }
+        total_added += len(chunk_ids)
+        if old:
+            updated_files += 1
+            logger.info("已更新: %s (%d chunks)", fname, len(chunk_ids))
+        else:
+            added_files += 1
+            logger.info("已入库: %s (%d chunks)", fname, len(chunk_ids))
+
+    # 处理已删除文件（清单有但目录无）：清理孤儿 chunk
+    for fname, old in manifest.items():
+        if fname not in current_files:
+            try:
+                delete_by_ids(old.get("chunk_ids", []))
+                deleted_files += 1
+                logger.info("已清理删除文件: %s", fname)
+            except Exception as e:
+                logger.warning("清理孤儿 chunk 失败 %s: %s", fname, e)
+
+    save_manifest(new_manifest)
+    print(
+        f"[ingest] 新增 {added_files}，更新 {updated_files}，跳过 {skipped_files}，"
+        f"删除 {deleted_files} 个文件；本次入库 {total_added} chunks"
+    )
+    return total_added
 
 
 def main():
-    parser = argparse.ArgumentParser(description="RAG 多模态文档入库工具")
-    parser.add_argument("--rebuild", action="store_true", help="清空旧索引后重建")
+    parser = argparse.ArgumentParser(description="RAG 多模态文档入库工具（增量）")
+    parser.add_argument("--rebuild", action="store_true", help="清空旧索引后全量重建")
     args = parser.parse_args()
     count = ingest(rebuild=args.rebuild)
-    print(f"[ingest] 完成，共 {count} 个 chunk")
+    print(f"[ingest] 完成，本次处理 {count} 个 chunk")
     return count
 
 
 if __name__ == "__main__":
-    sys.exit(0)
+    main()

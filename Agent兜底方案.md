@@ -24,6 +24,7 @@
 
 - **规则短路**：
   - 空输入 → `chat`
+  - 时效性问题（明确时间/天气，`_is_realtime_query`）且联网开启 → `web`（绕过 LLM 路由提速）
   - 短输入（<=4 字且不含疑问词/搜索词）→ `chat`
 - **LLM 路由**：调用小模型判断 `rag` / `web` / `chat`
   - 若 `web_search_enabled=False`，`web` 自动降级为 `rag`
@@ -44,6 +45,7 @@
 
 - 功能关闭（`memory_qa_cache_enabled=False`）→ `memory_hit=False`
 - 输入过短（<4 字）或 `user_id` 为空 → `memory_hit=False`
+- 时效性问题（明确时间/天气，`_is_realtime_query`）→ 跳过匹配，避免命中过时历史答案直接联网
 - 问题向量化失败 → 静默降级 `memory_hit=False`，不阻断
 - 问答记忆检索失败 → 静默降级 `hit=None`，不阻断
 - 命中时写入 `answer` 与 `memory_hit=True`，后续条件边短路到 END
@@ -97,6 +99,8 @@
 ---
 
 ## 五、后台记忆层兜底（失败仅记日志）
+
+**时效性问题跳过**（`memory_background_node`）：若输入为时效性问题（明确时间/天气，`_is_realtime_query`），整段后台记忆（关键信息抽取 + 记忆更新 + QA 缓存）直接返回空，不写入任何长期记忆，避免天气等过时信息污染记忆库。
 
 ### 8. 关键信息抽取
 
@@ -163,6 +167,13 @@
 - 初始化失败 → 仅 `warning` 日志
 - 向量库为空 → 自动后台入库
 - 已有数据 → 跳过入库
+
+预热末尾在 `_do_warmup` 内启动知识库文件监听（`start_file_watcher`，对应 `rag/file_watcher.py`）：
+
+- 开关关闭（`rag_auto_sync_enabled=false`）→ 跳过监听，仅记 info 日志
+- 监听启动失败 → 仅 `warning` 日志（不影响服务启动，用户仍可手动 `python -m rag.ingest` 同步）
+- 消费线程为 daemon，随主进程退出，不阻塞服务停止
+- 自动增量入库失败 → 仅 `error` 日志，不抛异常、不中断监听循环，下次文件变更仍会重试
 
 ---
 

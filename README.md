@@ -30,11 +30,11 @@ graph TB
 | 模块 | 说明 |
 |------|------|
 | 智能问答 | 多模态 RAG 检索增强生成，三路路由（知识库/联网搜索/闲聊），两阶段检索（向量召回 top-20 + CrossEncoder 重排序 top-k） |
-| 联网搜索 | DuckDuckGo（主）+ 百度（备）双引擎，最新信息、实时资讯、天气新闻等 |
+| 联网搜索 | DuckDuckGo（主）+ 百度（备）双引擎，最新信息、实时资讯、天气新闻等；时效性问题（明确时间/天气）路由短路优先联网 |
 | RAG 质量评估 | OpenEvals 检索相关性、忠实度、帮助度、答案相关性 |
 | 文档处理 | 支持 .txt/.md/.pdf/.docx/.xlsx 及图片(.png/.jpg)，扫描件 OCR（easyocr） |
 | 短期记忆 | LangGraph checkpointer（进程内 MemorySaver）+ 窗口/字符双预算，超窗自动生成会话压缩摘要注入（不丢主线） |
-| 长期记忆 | SQLite 结构化记忆（data/memory.db）：用户画像、关键事实（带优先级）、分层摘要；每轮规则快速抽取 + LLM 结构化抽取，P0 关键信息硬保留，按预算分层注入 |
+| 长期记忆 | SQLite 结构化记忆（data/memory.db）：用户画像、关键事实（带优先级）、分层摘要；每轮规则快速抽取 + LLM 结构化抽取，P0 关键信息硬保留，按预算分层注入；时效性问题（明确时间/天气）跳过记忆保存 |
 | 问答记忆缓存 | 历史问答对带向量落库，新问题与历史问题余弦相似度达阈（默认 0.90）时直接复用历史答案，跳过大模型生成 |
 | 智能体评估 | OpenEvals（correctness/hallucination/plan_adherence）+ LangSmith trace 分析 |
 | 钉钉工具调用 | 自然语言驱动钉钉操作：创建/查询待办，创建/查询/取消/修改会议；写操作需用户确认，查询操作直接执行 |
@@ -73,6 +73,10 @@ RAG_CHUNK_SIZE=500
 RAG_CHUNK_OVERLAP=80
 # 知识文档存放目录（相对路径基于项目根目录，支持绝对路径）
 RAG_DOCS_DIR=data/docs
+# 运行时知识库自动同步（watchdog 监听 data/docs 增删改，自动增量入库，无需重启服务）
+RAG_AUTO_SYNC_ENABLED=true
+# 文件变更防抖时间（秒，等待该时长内无新变化才触发入库）
+RAG_AUTO_SYNC_DEBOUNCE=2.0
 LONG_TERM_DB_PATH=data/memory.db
 # 记忆预算与抽取配置（可选，均有默认值）
 MEMORY_CONTEXT_BUDGET=1600
@@ -191,6 +195,7 @@ docker compose restart                     # 重启服务
 │   ├── reranker.py         # CrossEncoder 重排序
 │   ├── web_search.py      # 联网搜索（DuckDuckGo+百度）
 │   ├── ocr.py              # OCR 处理（easyocr）
+│   ├── file_watcher.py     # 知识库文件监听（watchdog）+ 队列消费自动增量入库
 │   └── ingest.py           # 多格式文档入库 CLI
 ├── memory/                 # 记忆模块
 │   ├── short_term.py       # 短期记忆（MemorySaver）

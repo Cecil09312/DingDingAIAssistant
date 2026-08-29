@@ -5,6 +5,7 @@
 """
 
 import json
+import re
 from typing import Any, List
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
@@ -57,6 +58,35 @@ def _get_router_llm(temperature: float = 0.0):
         max_retries=s.llm_max_retries,
         request_timeout=s.llm_request_timeout,
     )
+
+
+# 时效性问题：含明确时间表达或天气查询，这类答案会随时间变化，
+# 应优先走联网搜索且不写入长期记忆（避免过时信息污染记忆库）
+_WEATHER_KEYWORDS = (
+    "天气", "气温", "天气预报", "空气质量", "雾霾",
+    "下雨吗", "下雪吗", "紫外线", "pm2.5",
+)
+_TIME_EXPR_RE = re.compile(
+    r"今天|明天|后天|大后天|大前天|前天|"  # 相对日期
+    r"昨晚|昨夜|今早|今晚|今夜|今儿|明早|明晚|明夜|前晚|后晚|"  # 早/晚/夜补充
+    r"(?:[本下这]周|周[一二三四五六日天]|星期[一二三四五六日天])|"  # 周几
+    r"\d{1,2}\s*月\s*\d{1,2}\s*[日号]|"  # X月X日/号
+    r"\d{4}\s*年|"  # 年份
+    r"\d{1,2}\s*[点时](?:半|钟|\s*\d{1,2}\s*分)?|"  # X点/点半/X点X分
+    r"\d{1,2}\s*[:：]\s*\d{2}"  # HH:MM
+)
+
+
+def _is_realtime_query(user_input: str) -> bool:
+    """判断是否为时效性问题（含明确时间表达或天气查询）。
+
+    这类问题答案随时间变化，应优先联网查询且不写入长期记忆。
+    """
+    if not user_input:
+        return False
+    if any(k in user_input for k in _WEATHER_KEYWORDS):
+        return True
+    return _TIME_EXPR_RE.search(user_input) is not None
 
 
 # ---------- 节点 0: 预检查（缓存匹配 + 路由判断）----------
@@ -137,6 +167,11 @@ def _decide_route(user_input: str) -> str:
         from config.settings import get_settings
         if get_settings().tool_calling_enabled:
             return "tool"
+    # 时效性问题（明确时间/天气等）优先走联网搜索，绕过 LLM 路由提速
+    if _is_realtime_query(user_input):
+        from config.settings import get_settings
+        if get_settings().web_search_enabled:
+            return "web"
     # 短输入（<=4 字且不含疑问词/搜索词/工具词）倾向于闲聊
     if len(user_input) <= 4 and not any(
         k in user_input for k in ROUTER_KEYWORDS + WEB_SEARCH_KEYWORDS + TOOL_KEYWORDS
@@ -210,6 +245,11 @@ def qa_match_node(state: AgentState) -> dict:
     user_input = state.get("user_input", "").strip()
     user_id = state.get("user_id", "")
     if not user_id or len(user_input) < 4:
+        return {"memory_hit": False}
+
+    # 时效性问题（明确时间/天气）不匹配问答缓存：答案随时间变化，
+    # 命中历史缓存会返回过时答案，应直接联网查询
+    if _is_realtime_query(user_input):
         return {"memory_hit": False}
 
     try:
@@ -594,6 +634,9 @@ def memory_background_node(state: AgentState) -> dict:
     顺序执行 extract_facts_node 与 memory_update_node，两者内部均有
     独立 try/except 兜底，任一失败不影响另一者；本节点不阻塞主响应链路。
     """
+    # 时效性问题（明确时间/天气等）不保存长期记忆：答案随时间变化，无长期价值
+    if _is_realtime_query(state.get("user_input", "")):
+        return {}
     result = {}
     result.update(extract_facts_node(state))
     result.update(memory_update_node(state))

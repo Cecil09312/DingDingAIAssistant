@@ -24,6 +24,8 @@ numpy>=1.24.0
 pillow>=10.0.0
 # 多路召回 BM25 关键词检索（可选，RAG_BM25_ENABLED=true 时需要）
 rank-bm25>=0.2.2
+# 知识库文件监听（RAG_AUTO_SYNC_ENABLED=true 时监听 docs_dir 增删改自动增量入库）
+watchdog>=4.0.0
 # jina-clip-v2 的自定义建模代码（trust_remote_code）依赖 timm 视觉骨干网络
 timm>=1.0.0
 

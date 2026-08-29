@@ -53,7 +53,8 @@ class Settings(BaseSettings):
 
     # ===== 向量库（Milvus Lite 本地文件持久化）=====
     # Milvus Lite 数据库文件路径（指向本地 .db 文件即启用 Milvus Lite，无需独立部署服务）
-    milvus_uri: str = "data/milvus/milvus_lite.db"
+    # 注意：环境变量名用 MILVUS_DB_FILE，不用 MILVUS_URI（pymilvus import 时会把 MILVUS_URI 当服务地址解析，导致 Illegal uri 报错）
+    milvus_db_file: str = "data/milvus/milvus_lite.db"
     # Milvus collection 名称
     milvus_collection: str = "dingtalk_kb"
     # 索引类型（Milvus Lite 仅支持 FLAT）
@@ -72,6 +73,12 @@ class Settings(BaseSettings):
     rag_chunk_overlap: int = 80
     # 知识文档存放目录（相对路径基于项目根目录，支持绝对路径）
     rag_docs_dir: str = "data/docs"
+
+    # ===== 运行时知识库自动同步（watchdog 文件监听 + 进程内 queue）=====
+    # 开启后后台监听 docs_dir 文件增删改，自动触发增量入库，无需重启服务
+    rag_auto_sync_enabled: bool = True
+    # 文件变更防抖时间（秒）：变更后等待该时长无新变化才触发入库，避免大文件分块写入频繁触发
+    rag_auto_sync_debounce: float = 2.0
 
     # ===== 多路召回（BM25 关键词检索）=====
     # 开启后向量检索 + BM25 并行召回，RRF 融合排序，提升精确匹配召回率
@@ -171,7 +178,7 @@ class Settings(BaseSettings):
     @property
     def milvus_db_path(self) -> Path:
         """返回 Milvus Lite 数据库文件的绝对路径（父目录自动创建）。"""
-        p = Path(self.milvus_uri)
+        p = Path(self.milvus_db_file)
         if not p.is_absolute():
             p = PROJECT_ROOT / p
         p.parent.mkdir(parents=True, exist_ok=True)
