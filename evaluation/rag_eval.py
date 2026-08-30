@@ -44,19 +44,18 @@ def _judge_llm():
     )
 
 
-def _make_evaluator(prompt, inputs_map, name):
+def _make_evaluator(prompt, feedback_key):
     """构建一个 OpenEvals LLM 评判器。
 
     Args:
         prompt: openevals.prompts 中的预置 prompt 模板
-        inputs_map: 输入字段映射 {evaluator入参: sample字段}
-        name: 评估器名称
+        feedback_key: 评估结果存储键名
     """
     return create_llm_as_judge(
         prompt=prompt,
-        judge_llm=_judge_llm(),
-        inputs=inputs_map,
-        name=name,
+        judge=_judge_llm(),
+        feedback_key=feedback_key,
+        continuous=True,
     )
 
 
@@ -65,22 +64,18 @@ def build_rag_evaluators():
     return {
         "retrieval_relevance": _make_evaluator(
             RAG_RETRIEVAL_RELEVANCE_PROMPT,
-            {"question": "question", "retrieved_contexts": "reference_docs"},
             "retrieval_relevance",
         ),
         "groundedness": _make_evaluator(
             RAG_GROUNDEDNESS_PROMPT,
-            {"answer": "answer", "context": "reference_context"},
             "groundedness",
         ),
         "helpfulness": _make_evaluator(
             RAG_HELPFULNESS_PROMPT,
-            {"answer": "answer", "question": "question"},
             "helpfulness",
         ),
         "answer_relevance": _make_evaluator(
             ANSWER_RELEVANCE_PROMPT,
-            {"answer": "answer", "question": "question"},
             "answer_relevance",
         ),
     }
@@ -93,20 +88,23 @@ def run_rag_eval(sample: dict) -> dict:
         sample: 含 question, answer, reference_context, reference_docs 的字典
 
     Returns:
-        {评估器名: {score, reasoning}} 的结果字典
+        {评估器名: {score, comment}} 的结果字典
     """
     evaluators = build_rag_evaluators()
+    # 各评估器所需的 prompt 变量映射（prompt 变量名 -> sample 字段名）
+    call_kwargs = {
+        "retrieval_relevance": {"inputs": sample["question"], "context": sample["reference_docs"]},
+        "groundedness": {"outputs": sample["answer"], "context": sample["reference_context"]},
+        "helpfulness": {"inputs": sample["question"], "outputs": sample["answer"]},
+        "answer_relevance": {"inputs": sample["question"], "outputs": sample["answer"]},
+    }
     results = {}
     for name, evaluator in evaluators.items():
         try:
-            res = evaluator(inputs=sample)
-            # OpenEvals 返回 {key: {score, ...}} 或直接 {score, ...}
-            if isinstance(res, dict) and name in res:
-                results[name] = res[name]
-            else:
-                results[name] = res
+            res = evaluator(**call_kwargs[name])
+            results[name] = res
         except Exception as e:
-            results[name] = {"score": None, "reasoning": f"评估失败: {e}", "error": True}
+            results[name] = {"score": None, "comment": f"评估失败: {e}", "error": True}
     return results
 
 

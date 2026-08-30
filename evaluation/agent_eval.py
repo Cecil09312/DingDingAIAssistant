@@ -35,21 +35,21 @@ def build_agent_evaluators():
     return {
         "correctness": create_llm_as_judge(
             prompt=CORRECTNESS_PROMPT,
-            judge_llm=_judge_llm(),
-            inputs={"question": "question", "answer": "answer", "reference_answer": "expected_answer"},
-            name="correctness",
+            judge=_judge_llm(),
+            feedback_key="correctness",
+            continuous=True,
         ),
         "hallucination": create_llm_as_judge(
             prompt=HALLUCINATION_PROMPT,
-            judge_llm=_judge_llm(),
-            inputs={"answer": "answer", "context": "reference_context"},
-            name="hallucination",
+            judge=_judge_llm(),
+            feedback_key="hallucination",
+            continuous=True,
         ),
         "plan_adherence": create_llm_as_judge(
             prompt=PLAN_ADHERENCE_PROMPT,
-            judge_llm=_judge_llm(),
-            inputs={"question": "question", "answer": "answer"},
-            name="plan_adherence",
+            judge=_judge_llm(),
+            feedback_key="plan_adherence",
+            continuous=True,
         ),
     }
 
@@ -57,16 +57,31 @@ def build_agent_evaluators():
 def run_agent_eval(sample: dict) -> dict:
     """对单个样本运行全部智能体评估器。"""
     evaluators = build_agent_evaluators()
+    # 各评估器所需的 prompt 变量映射（prompt 变量名 -> sample 字段名）
+    call_kwargs = {
+        "correctness": {
+            "inputs": sample["question"],
+            "outputs": sample["answer"],
+            "reference_outputs": sample["expected_answer"],
+        },
+        "hallucination": {
+            "inputs": sample["question"],
+            "outputs": sample["answer"],
+            "context": sample["reference_context"],
+            "reference_outputs": sample["expected_answer"],
+        },
+        "plan_adherence": {
+            "inputs": sample["question"],
+            "outputs": sample["answer"],
+        },
+    }
     results = {}
     for name, evaluator in evaluators.items():
         try:
-            res = evaluator(inputs=sample)
-            if isinstance(res, dict) and name in res:
-                results[name] = res[name]
-            else:
-                results[name] = res
+            res = evaluator(**call_kwargs[name])
+            results[name] = res
         except Exception as e:
-            results[name] = {"score": None, "reasoning": f"评估失败: {e}", "error": True}
+            results[name] = {"score": None, "comment": f"评估失败: {e}", "error": True}
     return results
 
 
